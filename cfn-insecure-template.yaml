@@ -1,0 +1,168 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  [INTENCIONALMENTE INSEGURA - NO DESPLEGAR] Plantilla con malas prácticas comunes
+  para ejercicios de análisis estático (Checkov, cfn-nag, cfn-lint, cfn-guard).
+Metadata:
+  Warning: "NO DEPLOY - solo para análisis local"
+Parameters:
+  DBMasterUsername:
+    Type: String
+    Default: admin
+    Description: Usuario de base de datos
+  DBMasterPassword:
+    Type: String
+    Default: SuperSecret123!
+  AvailabilityZone:
+    Type: String
+    Default: us-east-1a
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-0123456789abcdef0
+Resources:
+  PublicBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "student-bucket-${AWS::AccountId}-${AWS::Region}"
+      AccessControl: PublicRead
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+  PublicBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref PublicBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicAll
+            Effect: Allow
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub "${PublicBucket.Arn}"
+              - !Sub "${PublicBucket.Arn}/*"
+            Condition:
+              IpAddress:
+                aws:SourceIp: "0.0.0.0/0"
+
+  Sg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Wide-open SG"
+      VpcId: vpc-12345678
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: 0.0.0.0/0
+
+  TheVolume:
+    Type: AWS::EC2::Volume
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone
+      Size: 8
+      Encrypted: false
+
+  TheDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: the-db
+      Engine: mysql
+      DBInstanceClass: db.t3.micro
+      MasterUsername: !Ref DBMasterUsername
+      MasterUserPassword: !Ref DBMasterPassword
+      PubliclyAccessible: true
+      StorageType: gp2
+      AllocatedStorage: 20
+      StorageEncrypted: false
+      BackupRetentionPeriod: 0
+      DeletionProtection: false
+
+  TheQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: the-queue
+      VisibilityTimeout: 1
+
+  TheLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/name
+
+  TheKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: "KMS Key"
+      EnableKeyRotation: false
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowEverythingToEveryone
+            Effect: Allow
+            Principal: "*"
+            Action: "kms:*"
+            Resource: "*"
+
+  TheLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: the-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: the-inline
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: "*"
+                Resource: "*"
+
+  TheFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: the-fn
+      Handler: index.handler
+      Runtime: python3.11
+      Role: !GetAtt TheLambdaRole.Arn
+      Environment:
+        Variables:
+          SECRET_API_KEY: "sk_live_1234567890"
+      Code:
+        ZipFile: |
+          def handler(event, context):
+              return {"ok": True}
+
+  TheParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/db/password
+      Type: String
+      Value: "P@ssw0rd!"
+
+  TheTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: the-topic
+
+  EcrRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: the-repo
+      ImageScanningConfiguration:
+        scanOnPush: false
+      ImageTagMutability: MUTABLE
+Outputs:
+  Warning:
+    Value: "Plantilla intencionalmente insegura. NO DESPLEGAR."
